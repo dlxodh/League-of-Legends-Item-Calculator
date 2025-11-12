@@ -1,7 +1,7 @@
 from src.calculator import get_iinfo
 from src.data_fetcher import get_latest_version
 
-gv = get_latest_version()
+print("Game Version = " + get_latest_version())
 
 def calculation():
     get_iinfo()
@@ -13,12 +13,12 @@ def calculation():
 
 while True:
     try:
-        a = int(input("Game Version = "+gv+"\n1:calculate\n2:quit\n"))
+        a = int(input("\n1:calculate\n2:quit\n"))
         if a == 1:
             calculation()
         elif a == 2:
             quit()
         else:
-            print("선택지 중에서 골라주세요")
+            print("Invalid Number")
     except ValueError:
-        print("숫자만 입력해주세요")
+        print("Invalid Input")

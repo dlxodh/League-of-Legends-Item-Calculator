@@ -1,83 +1,62 @@
 from .data_fetcher import fetch_items
 from .search import search, find_AH, get_data
 
-idata = fetch_items()
+# Price table baselines: stat_key -> (item_id, display_name)
+# idata and prices are now computed inside get_iinfo() so that
+# changing config.lang takes effect immediately on the next search.
+BASELINE = {
+    'FlatHPPoolMod':         ("1028", "Health"),
+    'FlatPhysicalDamageMod': ("1036", "Attack"),
+    'PercentAttackSpeedMod': ("1042", "Attack Speed"),
+    'FlatArmorMod':          ("1029", "Armor"),
+    'FlatSpellBlockMod':     ("1033", "Magic Resistance"),
+    'FlatMagicDamageMod':    ("1052", "Ability Power"),
+    'FlatMPPoolMod':         ("1027", "Mana"),
+    'FlatCritChanceMod':     ("1018", "Critical Chance"),
+    'FlatMovementSpeedMod':  ("1001", "Speed"),
+}
 
-#Price Table
-#Price of Health 1/Ruby Crystal
-H = idata["1028"]['gold']['total']/idata["1028"]['stats']['FlatHPPoolMod']
-#Price of Armor 1/Cloth Armor
-AR = idata["1029"]['gold']['total']/idata["1029"]['stats']['FlatArmorMod']
-#Price of Magic Resistance 1/Null-Magic Mantle
-MR = idata["1033"]['gold']['total']/idata["1033"]['stats']['FlatSpellBlockMod']    
-#Price of Attack 1/Long Sword
-AD = idata["1036"]['gold']['total']/idata["1036"]['stats']['FlatPhysicalDamageMod']
-#Price of Ability Power 1/Amplifying Tome
-AP = idata["1052"]['gold']['total']/idata["1052"]['stats']['FlatMagicDamageMod']
-#Price of Attack Speed 1%/Dagger
-AS = idata["1042"]['gold']['total']/idata["1042"]['stats']['PercentAttackSpeedMod']
-#Price of Ability Haste 1/Glowing Mote
-AH = idata["2022"]['gold']['total']/find_AH(idata["2022"]['description'])
-#Price of Mana 1/Sapphire Crystal
-M = idata["1027"]['gold']['total']/idata["1027"]['stats']['FlatMPPoolMod'] 
-#Price of Critical Chance 1%/Cloak of Agility
-C = idata["1018"]['gold']['total']/idata["1018"]['stats']['FlatCritChanceMod']
-#Price of Speed 1/Boots
-S = idata["1001"]['gold']['total']/idata["1001"]['stats']['FlatMovementSpeedMod']
+def build_price_table(idata):
+    table = {}
+    for stat_key, (item_id, label) in BASELINE.items():
+        cost = idata[item_id]['gold']['total']
+        unit = idata[item_id]['stats'][stat_key]
+        table[stat_key] = (label, cost / unit)
 
-def calculate():
-    pstat = {}
-    stat_price = 0
+    # Ability Haste is not in the stats dict — parse from description
+    ah_item = idata["2022"]
+    ah_val = find_AH(ah_item['description'])
+    table['AbilityHaste'] = ('Ability Haste', ah_item['gold']['total'] / ah_val)
 
-    mapping = {
-        'FlatHPPoolMod': ('Health', H),
-        'FlatPhysicalDamageMod': ('Attack', AD),
-        'PercentAttackSpeedMod': ('Attack Speed', AS),
-        'FlatArmorMod': ('Armor', AR),
-        'FlatSpellBlockMod': ('Magic Resistance', MR),
-        'FlatMagicDamageMod': ('Ability Power', AP),
-        'FlatMPPoolMod': ('Mana', M),
-        'FlatCritChanceMod': ('Critical Chance', C),
-        'AbilityHaste': ('Ability Haste', AH),
-        'FlatMovementSpeedMod': ('Speed', S)
-    }
+    return table
 
-    # calculate for stat
-    for key, value in stat.items():
-        if key in mapping:
-            name, unit_price = mapping[key]
-            total = value * unit_price
-            pstat[name] = total
-            stat_price += total
-
-    option_price = price - stat_price
-    pstat["Stat Price"] = stat_price
-    pstat["Option Price"] = option_price
-
-    pstat = {k: round(v, 1) for k, v in pstat.items()}
-
-    return pstat
-
-#get item info
 def get_iinfo():
-    global ifind
-    global i_info
-    global price
-    global stat
-    global tag
+    # Fetch fresh data using whatever config.lang is set to RIGHT NOW
+    idata = fetch_items()
+    price_table = build_price_table(idata)
+
     try:
-        ifind = search(input("Search: "), idata)
-        i_info = get_data(ifind, idata)
-        price = i_info[0]
-        stat = i_info[1]
-        tag = i_info[2]
-    
-        #find AH
+        item_id = search(input("Search: "), idata)
+        price, stat, tag, desc = get_data(item_id, idata)
+
+        stat = dict(stat)  # copy so we don't mutate the API data
         if 'AbilityHaste' in tag or 'CooldownReduction' in tag:
-            stat["AbilityHaste"] = find_AH(i_info[3])
+            stat["AbilityHaste"] = find_AH(desc)
+
+        pstat = {}
+        stat_price = 0
+        for key, value in stat.items():
+            if key in price_table:
+                label, unit_price = price_table[key]
+                gold = value * unit_price
+                pstat[label] = round(gold, 1)
+                stat_price += gold
+
+        pstat["Stat Price"]   = round(stat_price, 1)
+        pstat["Option Price"] = round(price - stat_price, 1)
 
         print("Price: " + str(price))
-        print(calculate())
-        #print(tag)
-    except KeyError:
-        print("Item Do not Exists")
+        print(pstat)
+
+    except (KeyError, TypeError):
+        print("Item does not exist")
